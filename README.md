@@ -1,110 +1,57 @@
-# kitty — Imperator configuration
+# kitty
 
-> *"I must not fear. Fear is the mind-killer."*
-> — Paul Atreides
+## Overview
 
-Kitty terminal configuration for the **Imperator** ricing — amber CRT palette, frosted glass effect via Wayland compositor blur, powerline slanted tab bar with golden hierarchy.
+Configuration for the [kitty](https://sw.kovidgoyal.net/kitty/) GPU-accelerated terminal emulator — the primary terminal across the Imperator ricing. Provides the amber CRT ANSI palette, a frosted-glass background, and a slanted powerline tab bar, and doubles as the palette reference other terminal-adjacent tools (newsboat, calcurse-open.sh) map their 16-color output onto.
 
----
+## Design Philosophy
 
-### Showcase
+- **Theme as a swappable include, not inline color directives.** `kitty.conf` never hardcodes a color; it includes `current-theme.conf` inside a `BEGIN_KITTY_THEME`/`END_KITTY_THEME` marker block, kitty's own convention for `+kitten themes` compatibility — switching themes never means editing the main config.
+- **Compositor-delegated blur.** kitty does not implement blur itself on Wayland; `background_blur` is only a *hint* forwarded to the compositor. The frosted-glass look is a joint responsibility of `background_opacity` (kitty) and compositor-side blur (niri).
+- **Legacy-safe glyph rendering.** `text_composition_strategy legacy` is set explicitly rather than left at kitty's newer default, because some Wayland compositors mis-render ligatures/glyphs under the newer strategy.
 
-![Kitty & NVim](./assets/img1.png)
+## Key Features
 
-![kitty & bat](./assets/img2.png)
+- 16 ANSI colors remapped to the Imperator palette (`Imperator.conf`), with bright variants distinct from their base (e.g. `color1`/`color9` = Plasma Red base/bright).
+- Powerline-slanted, left-aligned tab bar; active tab uses full-intensity Golden Signal (`#FFD700`) on near-black, inactive tabs recede to muted amber.
+- `shell_integration no-cursor` — disables kitty's shell-integration cursor override so the shell/Vim's own cursor-shape control is authoritative.
+- `sync_to_monitor yes` + tuned `repaint_delay`/`input_delay` for low input latency without tearing.
+- Font ligature feature flags (`+ss01 +ss02`) enabled specifically, not full ligature mode.
 
-![kitty, cava & btop](./assets/img3.png)
+## Configuration Breakdown
 
----
-
-## What this configures
-
-| File | Purpose |
-|------|---------|
-| `kitty.conf` | Main config — fonts, cursor, tabs, keybindings, frosted glass |
-| `Imperator.conf` | Canonical theme palette (source of truth for all 16 ANSI colors) |
-| `current-theme.conf` | Active theme include — loaded by `kitty.conf` via `BEGIN_KITTY_THEME` block |
-
----
+| File | Responsibility | Why it exists |
+|---|---|---|
+| `kitty.conf` | Fonts, cursor, scrollback, mouse, performance tuning, bell, window/tab-bar styling, keybindings, theme include | Main entry point kitty reads directly |
+| `Imperator.conf` | Canonical theme definition — background/foreground/cursor/selection/border/tab colors + full 16-color ANSI table | Source of truth for the palette; consumed by `kitty +kitten themes` to regenerate `current-theme.conf` |
+| `current-theme.conf` | Active theme, generated/copied from `Imperator.conf` | Decouples "what theme is defined" from "what theme is currently loaded", matching kitty's own theme-switching mechanism |
 
 ## Dependencies
 
-| Tool | Purpose | Install |
-|------|---------|---------|
-| `kitty` | Terminal emulator ≥ 0.35 | `pacman -S kitty` |
-| `JetBrainsMonoNL Nerd Font Mono` | Primary font with ligatures and Nerd Font glyphs | `pacman -S ttf-jetbrains-mono-nerd` |
-| A Wayland compositor with blur support | Frosted glass effect (niri, KDE, etc.) | — |
+- `kitty` ≥ 0.35 (tested on 0.47.1)
+- `JetBrainsMonoNL Nerd Font Mono` — primary font, ligatures + glyphs
+- A Wayland compositor with blur support (niri, KDE) for the frosted-glass effect to render as intended — without it, the terminal is simply semi-transparent over whatever is behind it
 
----
+## Usage
 
-## Paths
+Deployed as the kitty config directory. `kitty.conf`'s `include current-theme.conf` line requires `current-theme.conf` to exist at that relative path (`themes/Imperator.conf` copied or symlinked to `current-theme.conf` in the parent directory) — if the whole `kitty/` directory is deployed as a unit (copy or symlink), this resolves automatically.
 
-| Context | Path |
-|---------|------|
-| Active config | `~/.config/kitty/` |
-| This repo | `kitty/` |
+## Customization
 
----
+- **Palette**: edit `Imperator.conf` directly, or run `kitty +kitten themes --reload-in=all Imperator` after placing it under `themes/` to regenerate `current-theme.conf` through kitty's own tooling instead of hand-editing.
+- **Tab bar style**: `tab_bar_style`, `tab_powerline_style`, and the `*_tab_*` color/font directives in `kitty.conf`.
+- **Keybindings**: the `Keybindings` fold in `kitty.conf` — tabs, splits, clipboard, font size, fullscreen.
+- **Frosted glass intensity**: `background_opacity` (transparency amount) and `background_blur` (blur hint magnitude) in the `Background` fold.
 
-## Installation
+## Performance Considerations
 
-```sh
-# 1. Back up existing config (optional)
-mv ~/.config/kitty ~/.config/kitty.bak
+- `repaint_delay 10` / `input_delay 3` trade a small, deliberate amount of batching for reduced GPU wakeups versus repainting on every single event.
+- `background_blur 64` costs compositor-side GPU time, not kitty-side — the actual cost is paid by niri's renderer, not the terminal process.
+- `scrollback_lines 10000` is a memory/CPU tradeoff versus kitty's default; large scrollback buffers increase memory held per window but this value is well within normal desktop-RAM budgets.
+- `sync_to_monitor yes` avoids tearing at the cost of being bound to the display's refresh rate rather than rendering as fast as possible.
 
-# 2. Copy or symlink the config directory
-ln -s "$PWD/kitty" ~/.config/kitty
-# or: cp -r kitty ~/.config/kitty
+## Notes
 
-# 3. Place the theme in the themes subdirectory
-mkdir -p ~/.config/kitty/themes
-cp kitty/Imperator.conf ~/.config/kitty/themes/Imperator.conf
-
-# 4. Reload kitty
-# Press ctrl+shift+F5 inside a running kitty window, or restart kitty
-```
-
-If you prefer kitty's built-in theme manager instead of symlinking:
-
-```sh
-kitty +kitten themes --reload-in=all Imperator
-```
-
-This regenerates `current-theme.conf` automatically from `themes/Imperator.conf`.
-
----
-
-## Frosted glass
-
-The frosted glass effect requires:
-
-1. A transparent wallpaper visible behind the terminal (`background_opacity 0.55`).
-2. Compositor-side blur. On **niri**, configure blur in `~/.config/niri/config.kdl`. On **KDE**, enable blur in window decoration settings.
-
-`background_blur 64` is a hint sent to the compositor. The actual blur radius is compositor-controlled — kitty does not apply blur itself on Linux/Wayland.
-
----
-
-## Keybindings
-
-| Key | Action |
-|-----|--------|
-| `ctrl+shift+t` | New tab |
-| `ctrl+shift+w` | Close tab |
-| `ctrl+shift+←/→` | Previous / next tab |
-| `ctrl+shift+enter` | New window |
-| `ctrl+shift+h` | Horizontal split |
-| `ctrl+shift+b` | Vertical split |
-| `ctrl+shift+c/v` | Copy / paste |
-| `ctrl+= / ctrl+-` | Font size +2 / -2 |
-| `ctrl+0` | Reset font size |
-| `f11` | Toggle fullscreen |
-
----
-
-## Compatibility
-
-- Tested on **kitty 0.47.1** (Arch Linux / CachyOS, Wayland/niri).
-- Requires a Nerd Font for tab bar glyphs (`◆`, powerline arrows).
-- `text_composition_strategy legacy` is set for correct glyph rendering on some Wayland compositors.
-- `shell_integration no-cursor` disables kitty's cursor override so the shell prompt controls the cursor shape.
+- The frosted-glass effect **requires both** a transparent/blurred wallpaper behind the window *and* compositor-side blur configured (niri's `config.kdl`, or KDE window-decoration blur) — enabling only `background_opacity` without compositor blur produces plain transparency, not frost.
+- `disable_ligatures never` combined with only two feature flags (`+ss01 +ss02`) means ligatures are allowed but limited to those two OpenType feature sets — not every ligature the font defines is necessarily active.
+- This directory is a git submodule (`Impr-Kitty`) with its own remote — changes here should be committed/pushed independently of the parent `Imperator-dotfiles` repo.
